@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>학생 우정 네트워크</title>
+  <style>
+    body { margin: 0; overflow: hidden; }
+    .node { stroke: #fff; stroke-width: 1.5px; cursor: pointer; }
+    .link { stroke: #999; stroke-opacity: 0.3; }
+    .legend { font-family: sans-serif; font-size: 14px; }
+    .highlight-node { stroke: #282424; stroke-width: 3px; }
+    .highlight-link { stroke: #f53737; stroke-opacity: 1; stroke-width: 3px; }
+  </style>
+</head>
+<body>
+  <!-- D3.js 라이브러리 로드 -->
+  <script src="https://d3js.org/d3.v6.min.js"></script>
+  <script>
+    // 노드 데이터 (학생 1~20, 3개 그룹, 공격성향 1~5)
+    const nodes = [
+      {id: 0, name: "학생 1", group: "그룹 A", aggression: 3},
+      {id: 1, name: "학생 2", group: "그룹 A", aggression: 4},
+      {id: 2, name: "학생 3", group: "그룹 A", aggression: 3},
+      {id: 3, name: "학생 4", group: "그룹 A", aggression: 5},
+      {id: 4, name: "학생 5", group: "그룹 B", aggression: 3},
+      {id: 5, name: "학생 6", group: "그룹 B", aggression: 2},
+      {id: 6, name: "학생 7", group: "그룹 B", aggression: 3},
+      {id: 7, name: "학생 8", group: "그룹 B", aggression: 3},
+      {id: 8, name: "학생 9", group: "그룹 B", aggression: 4},
+      {id: 9, name: "학생 10", group: "그룹 B", aggression: 3},
+      {id: 10, name: "학생 11", group: "그룹 C", aggression: 2},
+      {id: 11, name: "학생 12", group: "그룹 C", aggression: 3},
+      {id: 12, name: "학생 13", group: "그룹 C", aggression: 3},
+      {id: 13, name: "학생 14", group: "그룹 C", aggression: 3},
+      {id: 14, name: "학생 15", group: "그룹 C", aggression: 4},
+      {id: 15, name: "학생 16", group: "그룹 C", aggression: 3},
+      {id: 16, name: "학생 17", group: "그룹 C", aggression: 3},
+      {id: 17, name: "학생 18", group: "그룹 C", aggression: 5},
+      {id: 18, name: "학생 19", group: "그룹 C", aggression: 3},
+      {id: 19, name: "학생 20", group: "그룹 C", aggression: 3}
+    ];
+
+    // 엣지 데이터 (source, target: 0-indexed)
+    const links = [
+      {source: 0, target: 1},
+      {source: 0, target: 2},
+      {source: 1, target: 2},
+      {source: 1, target: 3},
+      {source: 2, target: 3},
+      {source: 2, target: 4},
+      {source: 3, target: 5},
+      {source: 3, target: 6},
+      {source: 3, target: 7},
+      {source: 4, target: 7},
+      {source: 9, target: 13},
+      {source: 9, target: 15},
+      {source: 10, target: 15},
+      {source: 13, target: 18},
+      {source: 13, target: 19},
+      {source: 14, target: 19},
+      {source: 15, target: 1},
+      {source: 16, target: 2},
+      {source: 17, target: 3},
+      {source: 17, target: 4},
+      {source: 18, target: 6},
+      {source: 19, target: 7},
+      {source: 2, target: 8},
+      {source: 5, target: 13},
+      {source: 8, target: 16},
+      {source: 9, target: 11},
+      {source: 12, target: 15},
+      {source: 9, target: 3},
+      {source: 9, target: 6},
+      {source: 10, target: 8},
+      {source: 10, target: 12},
+      {source: 15, target: 7},
+      {source: 15, target: 16}
+    ];
+
+    // 공격성 값 기반 노드 크기 매핑
+    const sizeScale = d3.scaleLinear()
+      .domain([1, 5]) // 최소 1, 최대 5
+      .range([6, 20]); // 반지름 범위
+
+    // 색상 매핑 (3개 그룹)
+    const colorScale = d3.scaleOrdinal()
+      .domain(["그룹 A", "그룹 B", "그룹 C"])
+      .range(["#FF6F61", "#FFD166", "#5DADEC"]);
+
+    // SVG 캔버스 및 줌/팬 기능 설정
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+    const svg = d3.select("body").append("svg")
+      .attr("width", width)
+      .attr("height", height);
+
+    // zoomable 그룹 생성 (전체 그래프 요소 포함)
+    const g = svg.append("g");
+
+    // 줌/팬 기능 적용 (최소 0.5배, 최대 5배)
+    const zoom = d3.zoom()
+      .scaleExtent([0.5, 5])
+      .on("zoom", (event) => {
+        g.attr("transform", event.transform);
+      });
+    svg.call(zoom);
+
+    // 화살표 마커 정의
+    svg.append("defs").append("marker")
+        .attr("id", "arrowhead")
+        .attr("viewBox", "0 -5 10 10")
+        .attr("refX", 27)
+        .attr("refY", 0)
+        .attr("markerWidth", 6)
+        .attr("markerHeight", 6)
+        .attr("orient", "auto")
+      .append("path")
+        .attr("d", "M0,-5L10,0L0,5")
+        .attr("fill", "#999");
+
+    // force simulation 설정 -> -charge: 밀어냄 정도
+    const simulation = d3.forceSimulation(nodes)
+      .force("link", d3.forceLink(links).id(d => d.id).distance(110))
+      .force("charge", d3.forceManyBody().strength(-150))
+      .force("center", d3.forceCenter(width / 2, height / 2));
+
+    // 링크 (화살표)
+    const link = g.append("g")
+        .attr("class", "links")
+        .selectAll("line")
+        .data(links)
+        .enter().append("line")
+        .attr("class", "link")
+        .attr("stroke", "#999")
+        .attr("stroke-opacity", 0.6)
+        .attr("stroke-width", 1.5)
+        .attr("marker-end", "url(#arrowhead)");
+
+    // 노드
+    const node = g.append("g")
+      .attr("class", "nodes")
+      .selectAll("circle")
+      .data(nodes)
+      .enter().append("circle")
+      .attr("class", "node")
+      .attr("r", d => sizeScale(d.aggression))
+      .attr("fill", d => colorScale(d.group))
+      .call(drag(simulation))
+      .on("click", nodeClicked);
+    // 라벨
+    const labels = g.append("g")
+      .attr("class", "labels")
+      .selectAll("text")
+      .data(nodes)
+      .enter().append("text")
+      .attr("dy", -15)
+      .attr("text-anchor", "middle")
+      .attr("font-size", "10px")
+      .text(d => d.name);
+
+    // 드래그 함수 정의
+    function drag(simulation) {
+      function dragstarted(event, d) {
+        if (!event.active) simulation.alphaTarget(0.3).restart();
+        d.fx = d.x;
+        d.fy = d.y;
+      }
+      function dragged(event, d) {
+        d.fx = event.x;
+        d.fy = event.y;
+      }
+      function dragended(event, d) {
+        if (!event.active) simulation.alphaTarget(0);
+        d.fx = null;
+        d.fy = null;
+      }
+      return d3.drag()
+        .on("start", dragstarted)
+        .on("drag", dragged)
+        .on("end", dragended);
+    }
+
+    // 노드 클릭 시 하이라이트 처리
+    function nodeClicked(event, clickedNode) {
+      node.classed("highlight-node", false);
+      link.classed("highlight-link", false);
+      d3.select(this).classed("highlight-node", true);
+      // 클릭한 노드와 연결된 링크 하이라이트
+      link.filter(function(d) {
+        return d.source.id === clickedNode.id || d.target.id === clickedNode.id;
+      }).classed("highlight-link", true);
+      event.stopPropagation();
+    }
+
+    svg.on("click", function(event) {
+      if (event.target.tagName !== "circle") {
+        node.classed("highlight-node", false);
+        link.classed("highlight-link", false);
+      }
+    });
+
+    // 시뮬레이션 tick 업데이트 (노드가 화면 밖으로 나가지 않도록 clamping 적용)
+    simulation.on("tick", () => {
+      link.attr("x1", d => d.source.x)
+          .attr("y1", d => d.source.y)
+          .attr("x2", d => d.target.x)
+          .attr("y2", d => d.target.y);
+
+      node.attr("cx", d => d.x = Math.max(sizeScale(d.aggression), Math.min(width - sizeScale(d.aggression), d.x)))
+          .attr("cy", d => d.y = Math.max(sizeScale(d.aggression), Math.min(height - sizeScale(d.aggression), d.y)));
+
+      labels.attr("x", d => d.x)
+            .attr("y", d => d.y);
+    });
+
+    // 범례
+    const legendData = colorScale.domain();
+    const legend = svg.append("g")
+      .attr("class", "legend")
+      .attr("transform", "translate(20,20)");
+
+    legend.selectAll("rect")
+      .data(legendData)
+      .enter()
+      .append("rect")
+        .attr("x", 0)
+        .attr("y", (d, i) => i * 25)
+        .attr("width", 18)
+        .attr("height", 18)
+        .attr("fill", d => colorScale(d));
+
+    legend.selectAll("text")
+      .data(legendData)
+      .enter()
+      .append("text")
+        .attr("x", 25)
+        .attr("y", (d, i) => i * 25 + 14)
+        .text(d => d);
+  </script>
+</body>
+</html>
