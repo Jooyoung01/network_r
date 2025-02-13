@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>Student Friendship Network</title>
+  <style>
+    body { margin: 0; overflow: hidden; }
+    .node { stroke: #fff; stroke-width: 1.5px; }
+    .link { stroke: #999; stroke-opacity: 0.6; }
+    .legend {
+      font-family: sans-serif;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+<!-- D3.js 라이브러리 로드 -->
+<script src="https://d3js.org/d3.v6.min.js"></script>
+<script>
+// 1. 노드 데이터 (학생 1~20, degree 및 그룹 정보는 R 코드에서 산출된 값에 기반)
+const nodes = [
+  {id: 0, name: "Student 1", degree: 2, group: "Very Low Centrality (1)"},
+  {id: 1, name: "Student 2", degree: 4, group: "Moderate Centrality (3)"},
+  {id: 2, name: "Student 3", degree: 6, group: "Very High Centrality (5)"},
+  {id: 3, name: "Student 4", degree: 7, group: "Very High Centrality (5)"},
+  {id: 4, name: "Student 5", degree: 3, group: "Low Centrality (2)"},
+  {id: 5, name: "Student 6", degree: 2, group: "Very Low Centrality (1)"},
+  {id: 6, name: "Student 7", degree: 3, group: "Low Centrality (2)"},
+  {id: 7, name: "Student 8", degree: 4, group: "Moderate Centrality (3)"},
+  {id: 8, name: "Student 9", degree: 3, group: "Low Centrality (2)"},
+  {id: 9, name: "Student 10", degree: 5, group: "High Centrality (4)"},
+  {id: 10, name: "Student 11", degree: 3, group: "Low Centrality (2)"},
+  {id: 11, name: "Student 12", degree: 1, group: "Very Low Centrality (1)"},
+  {id: 12, name: "Student 13", degree: 2, group: "Very Low Centrality (1)"},
+  {id: 13, name: "Student 14", degree: 4, group: "Moderate Centrality (3)"},
+  {id: 14, name: "Student 15", degree: 1, group: "Very Low Centrality (1)"},
+  {id: 15, name: "Student 16", degree: 6, group: "Very High Centrality (5)"},
+  {id: 16, name: "Student 17", degree: 3, group: "Low Centrality (2)"},
+  {id: 17, name: "Student 18", degree: 2, group: "Very Low Centrality (1)"},
+  {id: 18, name: "Student 19", degree: 2, group: "Very Low Centrality (1)"},
+  {id: 19, name: "Student 20", degree: 3, group: "Low Centrality (2)"}
+];
+
+// 2. 엣지 데이터 (source, target: 0-indexed)
+const links = [
+  {source: 0, target: 1},
+  {source: 0, target: 2},
+  {source: 1, target: 2},
+  {source: 1, target: 3},
+  {source: 2, target: 3},
+  {source: 2, target: 4},
+  {source: 3, target: 5},
+  {source: 3, target: 6},
+  {source: 3, target: 7},
+  {source: 4, target: 7},
+  {source: 9, target: 13},
+  {source: 9, target: 15},
+  {source: 10, target: 15},
+  {source: 13, target: 18},
+  {source: 13, target: 19},
+  {source: 14, target: 19},
+  {source: 15, target: 1},
+  {source: 16, target: 2},
+  {source: 17, target: 3},
+  {source: 17, target: 4},
+  {source: 18, target: 6},
+  {source: 19, target: 7},
+  {source: 2, target: 8},
+  {source: 5, target: 13},
+  {source: 8, target: 16},
+  {source: 9, target: 11},
+  {source: 12, target: 15},
+  {source: 9, target: 3},
+  {source: 9, target: 6},
+  {source: 10, target: 8},
+  {source: 10, target: 12},
+  {source: 15, target: 7},
+  {source: 15, target: 16}
+];
+
+// 3. 색상 매핑 (중심성 그룹별)
+const colorScale = d3.scaleOrdinal()
+  .domain([
+    "Very Low Centrality (1)",
+    "Low Centrality (2)",
+    "Moderate Centrality (3)",
+    "High Centrality (4)",
+    "Very High Centrality (5)"
+  ])
+  .range(["#ADD8E6", "#32CD32", "#FFA500", "#8B0000", "#000000"]);
+
+// 4. SVG 캔버스 설정
+const width = window.innerWidth;
+const height = window.innerHeight;
+
+const svg = d3.select("body").append("svg")
+  .attr("width", width)
+  .attr("height", height);
+
+// 5. 화살표 마커 정의 (엣지 끝부분에)
+svg.append("defs").append("marker")
+    .attr("id", "arrow")
+    .attr("viewBox", "0 -5 10 10")
+    .attr("refX", 15)
+    .attr("refY", 0)
+    .attr("markerWidth", 6)
+    .attr("markerHeight", 6)
+    .attr("orient", "auto")
+  .append("path")
+    .attr("d", "M0,-5L10,0L0,5")
+    .attr("fill", "#999");
+
+// 6. force simulation 설정
+const simulation = d3.forceSimulation(nodes)
+  .force("link", d3.forceLink(links).id(d => d.id).distance(100))
+  .force("charge", d3.forceManyBody().strength(-200))
+  .force("center", d3.forceCenter(width / 2, height / 2));
+
+// 7. 링크 그리기
+const link = svg.append("g")
+    .attr("stroke", "#999")
+    .attr("stroke-opacity", 0.6)
+  .selectAll("line")
+  .data(links)
+  .enter().append("line")
+    .attr("stroke-width", 1)
+    .attr("marker-end", "url(#arrow)");
+
+// 8. 노드 그리기
+const node = svg.append("g")
+    .attr("stroke", "#fff")
+    .attr("stroke-width", 1.5)
+  .selectAll("circle")
+  .data(nodes)
+  .enter().append("circle")
+    .attr("r", 10)
+    .attr("fill", d => colorScale(d.group))
+    .call(drag(simulation));
+
+// 노드에 이름 라벨 추가
+const labels = svg.append("g")
+  .selectAll("text")
+  .data(nodes)
+  .enter().append("text")
+    .attr("dy", -15)
+    .attr("text-anchor", "middle")
+    .attr("font-size", "12px")
+    .text(d => d.name);
+
+// 9. 드래그 함수
+function drag(simulation) {
+  
+  function dragstarted(event, d) {
+    if (!event.active) simulation.alphaTarget(0.3).restart();
+    d.fx = d.x;
+    d.fy = d.y;
+  }
+  
+  function dragged(event, d) {
+    d.fx = event.x;
+    d.fy = event.y;
+  }
+  
+  function dragended(event, d) {
+    if (!event.active) simulation.alphaTarget(0);
+    d.fx = null;
+    d.fy = null;
+  }
+  
+  return d3.drag()
+      .on("start", dragstarted)
+      .on("drag", dragged)
+      .on("end", dragended);
+}
+
+// 10. 시뮬레이션 tick 시 업데이트
+simulation.on("tick", () => {
+  link
+      .attr("x1", d => d.source.x)
+      .attr("y1", d => d.source.y)
+      .attr("x2", d => d.target.x)
+      .attr("y2", d => d.target.y);
+
+  node
+      .attr("cx", d => d.x)
+      .attr("cy", d => d.y);
+
+  labels
+      .attr("x", d => d.x)
+      .attr("y", d => d.y);
+});
+
+// 11. 범례 추가
+const legendData = colorScale.domain();
+const legend = svg.append("g")
+  .attr("class", "legend")
+  .attr("transform", "translate(20,20)");
+
+legend.selectAll("rect")
+  .data(legendData)
+  .enter()
+  .append("rect")
+    .attr("x", 0)
+    .attr("y", (d,i) => i * 25)
+    .attr("width", 18)
+    .attr("height", 18)
+    .attr("fill", d => colorScale(d));
+
+legend.selectAll("text")
+  .data(legendData)
+  .enter()
+  .append("text")
+    .attr("x", 25)
+    .attr("y", (d,i) => i * 25 + 14)
+    .text(d => d);
+</script>
+</body>
+</html>
